@@ -11,7 +11,7 @@ on:
         type: string
     secrets:
       TF_VAR_PASSWORD:
-        required: true
+        required: false
       aws_assume_role_arn:
         required: true
 
