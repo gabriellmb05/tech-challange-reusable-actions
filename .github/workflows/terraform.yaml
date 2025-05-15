@@ -48,6 +48,7 @@ jobs:
 
       - name: Terraform Init
         run: |
+          terraform workspace select ${{ inputs.environment }} || terraform workspace new ${{ inputs.environment }} &&
           cd ${{ inputs.working_directory }} && terraform init
 
       - name: Terraform Validate
