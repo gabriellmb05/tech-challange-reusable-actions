@@ -10,8 +10,6 @@ on:
         required: true
         type: string
     secrets:
-      TF_VAR_PASSWORD:
-        required: false
       aws_assume_role_arn:
         required: true
 
@@ -21,9 +19,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      TF_VAR_password: ${{ secrets.TF_VAR_PASSWORD }}
-      TF_VAR_environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
