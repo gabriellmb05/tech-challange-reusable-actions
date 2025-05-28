@@ -35,37 +35,60 @@ jobs:
           role-session-name: GitHub_to_AWS_via_FederatedOIDC
           aws-region: us-east-1
 
-      - name: Read destroy configuration
-        id: read-destroy-config
+      - name: Read json file
+        id: json-file
         run: |
-          DESTROY="$(jq -r '.${{ inputs.environment }}' ./${{ inputs.working_directory }}/destroy_config.json)"
-          echo "destroy=$(echo $DESTROY)" >> $GITHUB_OUTPUT
-
+          DESTROY=$(jq -r '.destroy' ./${{ inputs.working_directory }}/parameters.json)
+          echo "destroy=$DESTROY" >> $GITHUB_OUTPUT
+      
+          MODULES_LENGTH=$(jq '.modules | length' ./${{ inputs.working_directory }}/parameters.json)
+          if [ "$MODULES_LENGTH" -eq 0 ]; then
+            echo "modules_exist=false" >> $GITHUB_OUTPUT
+          else
+            echo "modules_exist=true" >> $GITHUB_OUTPUT
+          fi
+        
       - name: Terraform Init
         run: |
           terraform workspace select ${{ inputs.environment }} || terraform workspace new ${{ inputs.environment }} &&
           cd ${{ inputs.working_directory }} && terraform init
 
-      - name: Terraform Validate
+      - name: Terraform Validate root files
         run: cd ${{ inputs.working_directory }} && terraform validate
 
       - name: Terraform Destroy
-        if: steps.read-destroy-config.outputs.destroy == 'true'
+        if: steps.json-file.outputs.destroy == 'true'
         run: |
           cd ${{ inputs.working_directory }} &&
           terraform workspace select ${{ inputs.environment }} || terraform workspace new ${{ inputs.environment }} &&
           terraform destroy -var-file="./envs/${{ inputs.environment }}/terraform.tfvars" -auto-approve
 
-      - name: Terraform Plan
-        if: steps.read-destroy-config.outputs.destroy != 'true'
+      - name: Terraform Plan and Apply without modules
+        if: steps.json-file.outputs.modules_exist == 'false' && steps.json-file.outputs.destroy != 'true'
         run: |
-          cd ${{ inputs.working_directory }} &&
-          terraform workspace select ${{ inputs.environment }} || terraform workspace new ${{ inputs.environment }} &&
+          cd ${{ inputs.working_directory }}
+          terraform workspace select ${{ inputs.environment }} || terraform workspace new ${{ inputs.environment }}
           terraform plan -var-file="./envs/${{ inputs.environment }}/terraform.tfvars" -out="${{ inputs.environment }}.plan"
+          terraform apply "${{ inputs.environment }}.plan" 
 
-      - name: Terraform Apply
-        if: steps.read-destroy-config.outputs.destroy != 'true'
+      - name: Validate, Plan and Apply Terraform modules
+        if: steps.json-file.outputs.modules_exist == 'true' && steps.json-file.outputs.destroy != 'true'
         run: |
-          cd ${{ inputs.working_directory }} &&
-          terraform workspace select ${{ inputs.environment }} || terraform workspace new ${{ inputs.environment }} &&
-          terraform apply "${{ inputs.environment }}.plan"
+          MODULES=$(jq -r '.modules[]' ./${{ inputs.working_directory }}/parameters.json)
+          
+          for MODULE in $MODULES; do
+            echo "Processing module: $MODULE"
+            
+            cd ${{ inputs.working_directory }}/$MODULE
+            
+            echo "Validating module: $MODULE"
+            terraform validate
+            
+            echo "Planning module: $MODULE"
+            terraform plan -var-file="../envs/${{ inputs.environment }}/terraform.tfvars" -out="${{ inputs.environment }}-${MODULE}.plan"
+            
+            echo "Applying module: $MODULE"
+            terraform apply "${{ inputs.environment }}-${MODULE}.plan"
+            
+            cd - > /dev/null
+          done
