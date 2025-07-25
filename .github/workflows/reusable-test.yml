@@ -4,14 +4,19 @@ on:
   workflow_call:
     inputs:
       sonar_project_key:
-        required: true
+        required: false
         type: string
       sonar_organization:
-        required: true
+        required: false
         type: string
+      enable_sonar:
+        required: false
+        type: boolean
+        default: false
+
     secrets:
       SONAR_TOKEN:
-        required: true
+        required: false
 
 jobs:
   unit-test:
@@ -32,6 +37,7 @@ jobs:
         run: mvn test
 
   code-analysis:
+    if: ${{ inputs.enable_sonar }}
     needs: unit-test
     runs-on: ubuntu-latest
     steps:
@@ -44,3 +50,21 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
+          distribution: 'adopt'
+
+      - name: Cache SonarCloud & Maven
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.sonar/cache
+            ~/.m2
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-build-
+
+      - name: Build and Analyze with Sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -Dsonar.projectKey=${{ inputs.sonar_project_key }} \
+            -Dsonar.organization=${{ inputs.sonar_organization }}
