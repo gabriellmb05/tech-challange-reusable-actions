@@ -1,4 +1,4 @@
-name: full-pipeline
+name: reusable-full-pipeline
 
 on:
   workflow_call:
@@ -16,6 +16,10 @@ on:
         required: false
         type: boolean
         default: false
+      enable_deploy:
+        required: false
+        type: boolean
+        default: false
 
     secrets:
       SONAR_TOKEN:
@@ -29,6 +33,10 @@ on:
       EKS_CLUSTER_NAME:
         required: false
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   run-tests:
     uses: ./.github/workflows/reusable-test.yml
@@ -40,14 +48,12 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   run-deploy:
+    if: ${{ inputs.enable_deploy }}
     needs: run-tests
     uses: ./.github/workflows/reusable-deploy.yml
     with:
-      sonar_project_key: ${{ inputs.sonar_project_key }}
-      sonar_organization: ${{ inputs.sonar_organization }}
       docker_image_tag: ${{ inputs.docker_image_tag }}
     secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       aws_assume_role_arn: ${{ secrets.aws_assume_role_arn }}

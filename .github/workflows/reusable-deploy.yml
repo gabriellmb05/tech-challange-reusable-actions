@@ -3,19 +3,11 @@ name: pipeline-deploy
 on:
   workflow_call:
     inputs:
-      sonar_project_key:
-        required: true
-        type: string
-      sonar_organization:
-        required: true
-        type: string
       docker_image_tag:
         required: true
         type: string
 
     secrets:
-      SONAR_TOKEN:
-        required: true
       DOCKERHUB_USER:
         required: true
       DOCKERHUB_TOKEN:
@@ -30,57 +22,7 @@ permissions:
   contents: read
 
 jobs:
-  unit-test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'adopt'
-
-      - name: Run tests
-        run: mvn test
-
-  code-analysis:
-    needs: unit-test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'adopt'
-
-      - name: Cache SonarCloud & Maven
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.sonar/cache
-            ~/.m2
-          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-build-
-
-      - name: Build and Analyze with Sonar
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-            -Dsonar.projectKey=${{ inputs.sonar_project_key }} \
-            -Dsonar.organization=${{ inputs.sonar_organization }}
-
   publish:
-    needs: code-analysis
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
