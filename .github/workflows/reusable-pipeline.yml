@@ -1,0 +1,54 @@
+name: full-pipeline
+
+on:
+  workflow_call:
+    inputs:
+      sonar_project_key:
+        required: false
+        type: string
+      sonar_organization:
+        required: false
+        type: string
+      docker_image_tag:
+        required: false
+        type: string
+      enable_sonar:
+        required: false
+        type: boolean
+        default: false
+
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      DOCKERHUB_USER:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+      aws_assume_role_arn:
+        required: false
+      EKS_CLUSTER_NAME:
+        required: false
+
+jobs:
+  run-tests:
+    uses: ./.github/workflows/reusable-test.yml
+    with:
+      enable_sonar: ${{ inputs.enable_sonar }}
+      sonar_project_key: ${{ inputs.sonar_project_key }}
+      sonar_organization: ${{ inputs.sonar_organization }}
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  run-deploy:
+    needs: run-tests
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      sonar_project_key: ${{ inputs.sonar_project_key }}
+      sonar_organization: ${{ inputs.sonar_organization }}
+      docker_image_tag: ${{ inputs.docker_image_tag }}
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      aws_assume_role_arn: ${{ secrets.aws_assume_role_arn }}
+      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
