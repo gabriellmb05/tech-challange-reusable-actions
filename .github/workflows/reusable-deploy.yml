@@ -1,4 +1,4 @@
-name: pipeline-deploy
+name: reusable-deploy
 
 on:
   workflow_call:
@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 jobs:
-  publish:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,22 +34,22 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push Docker Image
+      - name: Build & Push Docker
         uses: docker/build-push-action@v6.15.0
         with:
           tags: ${{ inputs.docker_image_tag }}
           context: .
           push: true
 
-      - name: Configure AWS Credentials
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_assume_role_arn }}
           role-session-name: GitHub_to_AWS_via_FederatedOIDC
           aws-region: us-east-1
 
-      - name: Update kube config
+      - name: Update kubeconfig
         run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region us-east-1
 
-      - name: Apply K8s Resources
+      - name: Apply K8s
         run: kubectl apply -f k8s/
