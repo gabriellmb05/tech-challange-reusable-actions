@@ -16,6 +16,9 @@ on:
         required: false
         type: boolean
         default: false
+      git_ref:
+        required: false
+        type: string
     secrets:
       SONAR_TOKEN:
         required: false
@@ -76,7 +79,7 @@ jobs:
             -Dsonar.organization=${{ inputs.sonar_organization }}
 
   deploy:
-    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+    if: ${{ (inputs.git_ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
     needs: [ unit-test, code-analysis ]
     runs-on: ubuntu-latest
     steps:
