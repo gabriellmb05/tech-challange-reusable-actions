@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   unit-test:
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -48,7 +48,7 @@ jobs:
         run: mvn test
 
   code-analysis:
-    if: ${{ github.event_name == 'pull_request' && inputs.enable_sonar }}
+    if: ${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && inputs.enable_sonar }}
     needs: unit-test
     runs-on: ubuntu-latest
     steps:
@@ -76,7 +76,7 @@ jobs:
             -Dsonar.organization=${{ inputs.sonar_organization }}
 
   deploy:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
