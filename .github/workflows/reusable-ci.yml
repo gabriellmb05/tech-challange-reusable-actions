@@ -13,6 +13,10 @@ on:
         required: false
         type: boolean
         default: false
+      enable_jacoco:
+        required: false
+        type: boolean
+        default: false
 
     secrets:
       SONAR_TOKEN:
@@ -36,10 +40,37 @@ jobs:
 
       - name: Run Tests
         run: mvn test
+  
+  quality-gate:
+    if: ${{ inputs.enable_jacoco }}
+    needs: unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Valida cobertura de teste
+        id: coverage
+        run: |
+          LINE_COVERAGE=$(xmllint --xpath "string(//report/counter[@type='LINE']/@covered)" target/site/jacoco/jacoco.xml)
+          LINE_MISSED=$(xmllint --xpath "string(//report/counter[@type='LINE']/@missed)" target/site/jacoco/jacoco.xml)
+
+          TOTAL=$((LINE_COVERAGE + LINE_MISSED))
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "Nenhuma linha encontrada no relatório do JaCoCoNo. Falhou."
+            exit 1
+          fi
+
+          PERCENT=$(( 100 * LINE_COVERAGE / TOTAL ))
+          echo "Cobertura total de linhas: $PERCENT%"
+
+          if [ "$PERCENT" -lt 70 ]; then
+            echo "❌ Cobertura de código $PERCENT% é menor que o limite de (70%)"
+            exit 1
+          else
+            echo "✅ Cobertura de código de $PERCENT% é aceitável"
+          fi
 
   code-analysis:
     if: ${{ inputs.enable_sonar }}
-    needs: unit-test
+    needs: quality-gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
