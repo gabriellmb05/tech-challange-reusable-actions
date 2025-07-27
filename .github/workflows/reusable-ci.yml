@@ -86,7 +86,7 @@ jobs:
             echo "❌ Code coverage is $PERCENT%, which is below the threshold of 70%"
             exit 1
           else
-            ech
+            echo
 
   code-analysis:
     if: ${{ inputs.enable_sonar }}
