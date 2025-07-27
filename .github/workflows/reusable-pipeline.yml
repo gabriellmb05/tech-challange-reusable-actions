@@ -1,0 +1,125 @@
+name: reusable-pipeline
+
+on:
+  workflow_call:
+    inputs:
+      sonar_project_key:
+        required: false
+        type: string
+      sonar_organization:
+        required: false
+        type: string
+      docker_image_tag:
+        required: false
+        type: string
+      enable_sonar:
+        required: false
+        type: boolean
+        default: false
+      run_tests:
+        required: true
+        type: boolean
+      run_sonar:
+        required: true
+        type: boolean
+      run_deploy:
+        required: true
+        type: boolean
+
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      DOCKERHUB_USER:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+      aws_assume_role_arn:
+        required: false
+      EKS_CLUSTER_NAME:
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  unit-test:
+    if: ${{ inputs.run_tests }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Run Tests
+        run: mvn test
+
+  code-analysis:
+    if: ${{ inputs.run_sonar && inputs.enable_sonar }}
+    needs: unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Sonar & Maven
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.sonar/cache
+            ~/.m2
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-build-
+
+      - name: Run Sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -Dsonar.projectKey=${{ inputs.sonar_project_key }} \
+            -Dsonar.organization=${{ inputs.sonar_organization }}
+
+  deploy:
+    if: ${{ inputs.run_deploy }}
+    needs: [ unit-test, code-analysis ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker Login
+        uses: docker/login-action@v3.3.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & Push Docker
+        uses: docker/build-push-action@v6.15.0
+        with:
+          tags: ${{ inputs.docker_image_tag }}
+          context: .
+          push: true
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_assume_role_arn }}
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: us-east-1
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region us-east-1
+
+      - name: Apply K8s
+        run: kubectl apply -f k8s/
