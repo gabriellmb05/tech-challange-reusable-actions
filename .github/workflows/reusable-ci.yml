@@ -13,6 +13,10 @@ on:
         required: false
         type: boolean
         default: false
+      enable_jacoco:
+        required: false
+        type: boolean
+        default: false
 
     secrets:
       SONAR_TOKEN:
@@ -37,9 +41,53 @@ jobs:
       - name: Run Tests
         run: mvn test
 
+      - name: Upload JaCoCo report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/jacoco.xml
+
+  quality-gate:
+    if: ${{ inputs.enable_jacoco }}
+    needs: unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download JaCoCo report
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-report
+          path: jacoco
+
+      - name: Validate test coverage
+        run: |
+          REPORT="jacoco/jacoco.xml"
+
+          if [ ! -f "$REPORT" ]; then
+            echo "❌ Coverage report not found at $REPORT"
+            exit 1
+          fi
+
+          LINE_COVERED=$(xmllint --xpath "string(//report/counter[@type='LINE']/@covered)" "$REPORT")
+          LINE_MISSED=$(xmllint --xpath "string(//report/counter[@type='LINE']/@missed)" "$REPORT")
+
+          TOTAL=$((LINE_COVERED + LINE_MISSED))
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "❌ No lines found in the JaCoCo report. Failing..."
+            exit 1
+          fi
+
+          PERCENT=$(( 100 * LINE_COVERED / TOTAL ))
+          echo "ℹ️ Total line coverage: $PERCENT%"
+
+          if [ "$PERCENT" -lt 70 ]; then
+            echo "❌ Code coverage is $PERCENT%, which is below the threshold of 70%"
+            exit 1
+          else
+            ech
+
   code-analysis:
     if: ${{ inputs.enable_sonar }}
-    needs: unit-test
+    needs: quality-gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
